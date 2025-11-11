@@ -35,6 +35,13 @@ export interface ChatResponse {
   finish_reason?: string;
 }
 
+export interface ChatChunk {
+  id: string;
+  model: string;
+  delta: string;
+  finish_reason?: string;
+}
+
 export interface ModelInfo {
   id: string;
   name: string;
@@ -109,4 +116,11 @@ export async function sendChatMessage(
 
 export async function checkOllamaAvailable(): Promise<boolean> {
   return await invoke<boolean>('check_ollama_available');
+}
+
+export async function sendChatMessageStream(
+  providerName: string,
+  request: ChatRequest
+): Promise<void> {
+  return await invoke<void>('send_chat_message_stream', { providerName, request });
 }

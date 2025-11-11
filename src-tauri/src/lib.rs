@@ -24,6 +24,7 @@ pub fn run() {
       commands::initialize_provider,
       commands::list_models,
       commands::send_chat_message,
+      commands::send_chat_message_stream,
       commands::check_ollama_available,
     ])
     .run(tauri::generate_context!())
