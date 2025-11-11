@@ -1,5 +1,8 @@
 <script lang="ts">
   import { sendChatMessage, type ChatRequest, type Message, MessageRole, type ChatResponse } from './api';
+  import Button from '@smui/button';
+  import Paper from '@smui/paper';
+  import Card, { Content } from '@smui/card';
 
   export let providerName: string = '';
   export let selectedModel: string = '';
@@ -55,9 +58,9 @@
 
 <div class="chat-container">
   <div class="chat-header">
-    <h2>Chat</h2>
+    <h2 style="color: var(--text-primary);">Chat</h2>
     {#if messages.length > 0}
-      <button class="clear-btn" on:click={clearChat}>Clear</button>
+      <Button variant="outlined" on:click={clearChat}>Clear</Button>
     {/if}
   </div>
 
@@ -69,42 +72,51 @@
       </div>
     {:else}
       {#each messages as message}
-        <div class="message {message.role}">
+        <Paper 
+          elevation={2} 
+          class="message {message.role}"
+          style="
+            background-color: {message.role === 'user' ? 'var(--user-message-bg)' : 'var(--assistant-message-bg)'};
+            color: {message.role === 'user' ? 'var(--user-message-text)' : 'var(--assistant-message-text)'};
+          "
+        >
           <div class="message-role">{message.role}</div>
           <div class="message-content">{message.content}</div>
-        </div>
+        </Paper>
       {/each}
     {/if}
 
     {#if isLoading}
-      <div class="message assistant loading">
+      <Paper elevation={2} class="message assistant loading" style="background-color: var(--assistant-message-bg); color: var(--assistant-message-text);">
         <div class="message-role">assistant</div>
         <div class="message-content">Thinking...</div>
-      </div>
+      </Paper>
     {/if}
 
     {#if error}
-      <div class="error-message">
+      <Paper elevation={3} style="padding: 1rem; background-color: var(--mdc-theme-error); color: var(--mdc-theme-on-error); margin: 1rem 0;">
         <strong>Error:</strong> {error}
-      </div>
+      </Paper>
     {/if}
   </div>
 
-  <div class="input-container">
+  <Paper elevation={1} class="input-container" style="background-color: var(--bg-secondary);">
     <textarea
       bind:value={userInput}
       on:keydown={handleKeyDown}
       placeholder="Type your message... (Shift+Enter for new line)"
       rows="3"
       disabled={isLoading || !providerName || !selectedModel}
+      style="background-color: var(--bg-primary); color: var(--text-primary); border-color: var(--border-color);"
     ></textarea>
-    <button
+    <Button 
+      variant="raised" 
       on:click={handleSend}
       disabled={!userInput.trim() || isLoading || !providerName || !selectedModel}
     >
-      Send
-    </button>
-  </div>
+      <span>Send</span>
+    </Button>
+  </Paper>
 </div>
 
 <style>
@@ -114,6 +126,7 @@
     height: 100%;
     max-width: 900px;
     margin: 0 auto;
+    background-color: var(--bg-primary);
   }
 
   .chat-header {
@@ -121,25 +134,13 @@
     justify-content: space-between;
     align-items: center;
     padding: 1rem;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-secondary);
   }
 
   .chat-header h2 {
     margin: 0;
     font-size: 1.5rem;
-  }
-
-  .clear-btn {
-    padding: 0.5rem 1rem;
-    background: #444;
-    border: none;
-    border-radius: 4px;
-    color: white;
-    cursor: pointer;
-  }
-
-  .clear-btn:hover {
-    background: #555;
   }
 
   .messages-container {
@@ -149,11 +150,12 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    background-color: var(--bg-primary);
   }
 
   .empty-state {
     text-align: center;
-    color: #666;
+    color: var(--text-secondary);
     margin-top: 4rem;
   }
 
@@ -162,26 +164,23 @@
     margin-top: 0.5rem;
   }
 
-  .message {
+  :global(.message) {
     padding: 1rem;
-    border-radius: 8px;
+    border-radius: 12px;
     max-width: 80%;
   }
 
-  .message.user {
+  :global(.message.user) {
     align-self: flex-end;
-    background: #2563eb;
     margin-left: auto;
   }
 
-  .message.assistant {
+  :global(.message.assistant) {
     align-self: flex-start;
-    background: #374151;
   }
 
-  .message.system {
+  :global(.message.system) {
     align-self: center;
-    background: #1f2937;
     font-style: italic;
   }
 
@@ -198,20 +197,13 @@
     word-wrap: break-word;
   }
 
-  .loading {
+  :global(.loading) {
     opacity: 0.7;
   }
 
-  .error-message {
+  :global(.input-container) {
     padding: 1rem;
-    background: #dc2626;
-    border-radius: 8px;
-    color: white;
-  }
-
-  .input-container {
-    padding: 1rem;
-    border-top: 1px solid #333;
+    border-top: 1px solid var(--border-color);
     display: flex;
     gap: 0.5rem;
   }
@@ -219,41 +211,20 @@
   textarea {
     flex: 1;
     padding: 0.75rem;
-    background: #1f2937;
-    border: 1px solid #374151;
+    border: 1px solid var(--border-color);
     border-radius: 4px;
-    color: white;
     font-family: inherit;
     font-size: 1rem;
     resize: vertical;
+    transition: border-color 0.2s;
   }
 
   textarea:focus {
     outline: none;
-    border-color: #2563eb;
+    border-color: var(--mdc-theme-primary);
   }
 
   textarea:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  button {
-    padding: 0.75rem 1.5rem;
-    background: #2563eb;
-    border: none;
-    border-radius: 4px;
-    color: white;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  button:hover:not(:disabled) {
-    background: #1d4ed8;
-  }
-
-  button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
