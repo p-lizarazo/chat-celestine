@@ -1,7 +1,7 @@
 use async_trait::async_trait;
-use futures::stream::{self, BoxStream};
-use futures::StreamExt;
+use futures::stream::{BoxStream, StreamExt};
 use serde::{Deserialize, Serialize};
+use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::llm::{
     ChatChunk, ChatRequest, ChatResponse, LlmError, LlmProvider, LlmResult, Message, MessageRole,
@@ -52,6 +52,25 @@ struct OpenAIChatResponse {
 struct OpenAIChoice {
     message: OpenAIMessage,
     finish_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIStreamResponse {
+    id: String,
+    model: String,
+    choices: Vec<OpenAIStreamChoice>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIStreamChoice {
+    delta: OpenAIDelta,
+    finish_reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIDelta {
+    #[serde(default)]
+    content: Option<String>,
 }
 
 #[async_trait]
@@ -117,17 +136,74 @@ impl LlmProvider for OpenAIProvider {
         &self,
         request: ChatRequest,
     ) -> LlmResult<BoxStream<'static, LlmResult<ChatChunk>>> {
-        // Simplified non-streaming implementation
-        let response = self.chat_completion(request).await?;
-
-        let chunk = ChatChunk {
-            id: response.id,
-            model: response.model,
-            delta: response.message.content,
-            finish_reason: response.finish_reason,
+        let openai_request = OpenAIChatRequest {
+            model: request.model.clone(),
+            messages: request
+                .messages
+                .iter()
+                .map(|m| OpenAIMessage {
+                    role: m.role.clone().into(),
+                    content: m.content.clone(),
+                })
+                .collect(),
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
+            stream: true,
         };
 
-        Ok(stream::once(async move { Ok(chunk) }).boxed())
+        let response = self
+            .client
+            .post(&format!("{}/chat/completions", self.base_url))
+            .header("Authorization", format!("Bearer {}", self.api_key))
+            .header("Content-Type", "application/json")
+            .json(&openai_request)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let error_text = response.text().await.unwrap_or_default();
+            return Err(LlmError::Provider(format!("OpenAI API error: {}", error_text)));
+        }
+
+        // Process the SSE stream
+        let stream = response.bytes_stream();
+        let stream = stream.map(|result| {
+            result.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+        });
+        
+        let reader = tokio_util::io::StreamReader::new(stream);
+        let lines = FramedRead::new(reader, LinesCodec::new());
+
+        let chunk_stream = lines.filter_map(|line_result| async move {
+            match line_result {
+                Ok(line) => {
+                    // OpenAI uses SSE format: "data: {json}"
+                    if line.trim().is_empty() || line == "data: [DONE]" {
+                        return None;
+                    }
+                    
+                    let json_str = line.strip_prefix("data: ").unwrap_or(&line);
+                    
+                    match serde_json::from_str::<OpenAIStreamResponse>(json_str) {
+                        Ok(stream_resp) => {
+                            let choice = stream_resp.choices.first()?;
+                            let delta = choice.delta.content.clone().unwrap_or_default();
+                            
+                            Some(Ok(ChatChunk {
+                                id: stream_resp.id,
+                                model: stream_resp.model,
+                                delta,
+                                finish_reason: choice.finish_reason.clone(),
+                            }))
+                        }
+                        Err(_) => None, // Skip invalid JSON
+                    }
+                }
+                Err(e) => Some(Err(LlmError::Provider(format!("Stream error: {}", e)))),
+            }
+        });
+
+        Ok(chunk_stream.boxed())
     }
 
     async fn list_models(&self) -> LlmResult<Vec<ModelInfo>> {
