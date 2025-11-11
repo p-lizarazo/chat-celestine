@@ -9,6 +9,13 @@
     type ProviderConfig,
     ProviderType,
   } from './api';
+  import Card, { Content } from '@smui/card';
+  import Button from '@smui/button';
+  import Textfield from '@smui/textfield';
+  import Select, { Option } from '@smui/select';
+  import Radio from '@smui/radio';
+  import FormField from '@smui/form-field';
+  import Paper, { Title as PaperTitle } from '@smui/paper';
 
   export let onProviderSelected: (provider: string, model: string) => void;
 
@@ -97,86 +104,82 @@
 </script>
 
 <div class="provider-selector">
-  <h2>Select Provider</h2>
+  <Card style="background-color: var(--bg-tertiary); padding: 1rem;">
+    <Content>
+      <h2 style="color: var(--text-primary); margin-bottom: 1.5rem;">Select Provider</h2>
 
-  <div class="provider-type">
-    <label>
-      <input
-        type="radio"
-        bind:group={selectedProvider}
-        value={ProviderType.Ollama}
-        disabled={isLoading}
-      />
-      Ollama (Local)
-      {#if ollamaAvailable}
-        <span class="status available">●</span>
-      {:else}
-        <span class="status unavailable">●</span>
+      <div class="provider-type">
+        <FormField>
+          <Radio bind:group={selectedProvider} value={ProviderType.Ollama} disabled={isLoading} />
+          <span slot="label" style="color: var(--text-primary);">
+            Ollama (Local)
+            {#if ollamaAvailable}
+              <span class="status available">●</span>
+            {:else}
+              <span class="status unavailable">●</span>
+            {/if}
+          </span>
+        </FormField>
+
+        <FormField>
+          <Radio bind:group={selectedProvider} value={ProviderType.OpenAI} disabled={isLoading} />
+          <span slot="label" style="color: var(--text-primary);">OpenAI (Cloud)</span>
+        </FormField>
+      </div>
+
+      {#if selectedProvider === ProviderType.OpenAI}
+        <Paper variant="outlined" style="padding: 1rem; margin-top: 1rem; background-color: var(--bg-secondary);">
+          <div class="form-group">
+            <Textfield
+              bind:value={openaiApiKey}
+              label="API Key"
+              type="password"
+              disabled={isLoading}
+              style="width: 100%; margin-bottom: 1rem;"
+              input$placeholder="sk-..."
+            />
+          </div>
+
+          <div class="form-group">
+            <Textfield
+              bind:value={openaiBaseUrl}
+              label="Base URL (optional)"
+              type="text"
+              disabled={isLoading}
+              style="width: 100%;"
+              input$placeholder="https://api.openai.com/v1"
+            />
+          </div>
+        </Paper>
       {/if}
-    </label>
 
-    <label>
-      <input
-        type="radio"
-        bind:group={selectedProvider}
-        value={ProviderType.OpenAI}
-        disabled={isLoading}
-      />
-      OpenAI (Cloud)
-    </label>
-  </div>
-
-  {#if selectedProvider === ProviderType.OpenAI}
-    <div class="provider-config">
-      <div class="form-group">
-        <label for="openai-key">API Key</label>
-        <input
-          id="openai-key"
-          type="password"
-          bind:value={openaiApiKey}
-          placeholder="sk-..."
-          disabled={isLoading}
-        />
+      <div style="margin-top: 1rem;">
+        <Button variant="raised" on:click={handleConnect} disabled={isLoading} style="width: 100%;">
+          <span>{isLoading ? 'Connecting...' : 'Connect'}</span>
+        </Button>
       </div>
 
-      <div class="form-group">
-        <label for="openai-url">Base URL (optional)</label>
-        <input
-          id="openai-url"
-          type="text"
-          bind:value={openaiBaseUrl}
-          placeholder="https://api.openai.com/v1"
-          disabled={isLoading}
-        />
-      </div>
-    </div>
-  {/if}
+      {#if error}
+        <Paper variant="outlined" style="padding: 0.75rem; margin-top: 1rem; background-color: var(--mdc-theme-error); color: var(--mdc-theme-on-error);">
+          <div class="error">{error}</div>
+        </Paper>
+      {/if}
 
-  <button class="connect-btn" on:click={handleConnect} disabled={isLoading}>
-    {isLoading ? 'Connecting...' : 'Connect'}
-  </button>
-
-  {#if error}
-    <div class="error">{error}</div>
-  {/if}
-
-  {#if models.length > 0}
-    <div class="models-section">
-      <label for="model-select">Select Model</label>
-      <select id="model-select" bind:value={selectedModel} on:change={handleModelChange}>
-        {#each models as model}
-          <option value={model.id}>{model.name}</option>
-        {/each}
-      </select>
-    </div>
-  {/if}
+      {#if models.length > 0}
+        <div class="models-section" style="margin-top: 1rem;">
+          <Select bind:value={selectedModel} label="Select Model" style="width: 100%;" on:SMUISelect:change={handleModelChange}>
+            {#each models as model}
+              <Option value={model.id}>{model.name}</Option>
+            {/each}
+          </Select>
+        </div>
+      {/if}
+    </Content>
+  </Card>
 </div>
 
 <style>
   .provider-selector {
-    padding: 1.5rem;
-    background: #1f2937;
-    border-radius: 8px;
     max-width: 500px;
   }
 
@@ -192,41 +195,17 @@
     margin-bottom: 1rem;
   }
 
-  .provider-type label {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 4px;
-    transition: background 0.2s;
-  }
-
-  .provider-type label:hover {
-    background: #374151;
-  }
-
   .status {
-    margin-left: auto;
+    margin-left: 0.5rem;
     font-size: 0.75rem;
   }
 
   .status.available {
-    color: #10b981;
+    color: var(--status-available);
   }
 
   .status.unavailable {
-    color: #6b7280;
-  }
-
-  .provider-config {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    margin-bottom: 1rem;
-    padding: 1rem;
-    background: #111827;
-    border-radius: 4px;
+    color: var(--status-unavailable);
   }
 
   .form-group {
@@ -235,81 +214,11 @@
     gap: 0.25rem;
   }
 
-  .form-group label {
-    font-size: 0.875rem;
-    font-weight: 500;
-  }
-
-  input[type='text'],
-  input[type='password'] {
-    padding: 0.5rem;
-    background: #1f2937;
-    border: 1px solid #374151;
-    border-radius: 4px;
-    color: white;
-    font-family: inherit;
-  }
-
-  input[type='text']:focus,
-  input[type='password']:focus {
-    outline: none;
-    border-color: #2563eb;
-  }
-
-  .connect-btn {
-    width: 100%;
-    padding: 0.75rem;
-    background: #2563eb;
-    border: none;
-    border-radius: 4px;
-    color: white;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .connect-btn:hover:not(:disabled) {
-    background: #1d4ed8;
-  }
-
-  .connect-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
   .error {
-    margin-top: 1rem;
-    padding: 0.75rem;
-    background: #dc2626;
-    border-radius: 4px;
-    color: white;
     font-size: 0.875rem;
   }
 
   .models-section {
     margin-top: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .models-section label {
-    font-size: 0.875rem;
-    font-weight: 500;
-  }
-
-  select {
-    padding: 0.5rem;
-    background: #111827;
-    border: 1px solid #374151;
-    border-radius: 4px;
-    color: white;
-    font-family: inherit;
-    cursor: pointer;
-  }
-
-  select:focus {
-    outline: none;
-    border-color: #2563eb;
   }
 </style>
