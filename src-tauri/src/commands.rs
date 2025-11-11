@@ -1,10 +1,11 @@
 use std::sync::Arc;
-use tauri::State;
+use tauri::{AppHandle, Emitter, State};
 use tokio::sync::RwLock;
+use futures::StreamExt;
 
 use crate::llm::{
     providers::{OllamaProvider, OpenAIProvider},
-    ChatRequest, ChatResponse, LlmProvider, ModelInfo, ProviderConfig, ProviderType,
+    ChatRequest, ChatResponse, LlmProvider, ModelInfo, ProviderConfig, ProviderType, ChatChunk,
 };
 
 pub struct AppState {
@@ -89,4 +90,41 @@ pub async fn send_chat_message(
 pub async fn check_ollama_available() -> Result<bool, String> {
     let provider = OllamaProvider::new(None);
     Ok(provider.is_available().await)
+}
+
+#[tauri::command]
+pub async fn send_chat_message_stream(
+    provider_name: String,
+    request: ChatRequest,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let providers = state.providers.read().await;
+
+    let provider = providers
+        .iter()
+        .find(|p| p.name() == provider_name)
+        .ok_or("Provider not found")?;
+
+    let mut stream = provider
+        .chat_completion_stream(request)
+        .await
+        .map_err(|e| format!("Stream initialization failed: {}", e))?;
+
+    // Emit chunks as they arrive
+    while let Some(chunk_result) = stream.next().await {
+        match chunk_result {
+            Ok(chunk) => {
+                app.emit("chat-chunk", &chunk)
+                    .map_err(|e| format!("Failed to emit chunk: {}", e))?;
+            }
+            Err(e) => {
+                app.emit("chat-error", &format!("{}", e))
+                    .map_err(|e| format!("Failed to emit error: {}", e))?;
+                return Err(format!("Stream error: {}", e));
+            }
+        }
+    }
+
+    Ok(())
 }

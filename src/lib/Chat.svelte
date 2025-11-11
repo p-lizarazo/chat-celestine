@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { sendChatMessage, type ChatRequest, type Message, MessageRole, type ChatResponse } from './api';
+  import { onMount, onDestroy } from 'svelte';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+  import { sendChatMessageStream, type ChatRequest, type Message, MessageRole, type ChatChunk } from './api';
 
   export let providerName: string = '';
   export let selectedModel: string = '';
@@ -8,6 +10,59 @@
   let userInput = '';
   let isLoading = false;
   let error = '';
+  let streamingMessage = '';
+  let unlistenChunk: UnlistenFn | null = null;
+  let unlistenError: UnlistenFn | null = null;
+  
+  // Analytics
+  let streamStartTime = 0;
+  let totalTokens = 0;
+  let tokensPerSecond = 0;
+
+  onMount(async () => {
+    // Listen for streaming chunks
+    unlistenChunk = await listen<ChatChunk>('chat-chunk', (event) => {
+      const chunk = event.payload;
+      
+      if (chunk.delta) {
+        streamingMessage += chunk.delta;
+        
+        // Update analytics
+        totalTokens++;
+        const elapsedSeconds = (Date.now() - streamStartTime) / 1000;
+        if (elapsedSeconds > 0) {
+          tokensPerSecond = totalTokens / elapsedSeconds;
+        }
+      }
+      
+      if (chunk.finish_reason) {
+        // Stream completed
+        const assistantMessage: Message = {
+          role: MessageRole.Assistant,
+          content: streamingMessage,
+        };
+        messages = [...messages, assistantMessage];
+        streamingMessage = '';
+        isLoading = false;
+        totalTokens = 0;
+        tokensPerSecond = 0;
+      }
+    });
+
+    // Listen for errors
+    unlistenError = await listen<string>('chat-error', (event) => {
+      error = event.payload;
+      isLoading = false;
+      streamingMessage = '';
+      totalTokens = 0;
+      tokensPerSecond = 0;
+    });
+  });
+
+  onDestroy(() => {
+    if (unlistenChunk) unlistenChunk();
+    if (unlistenError) unlistenError();
+  });
 
   async function handleSend() {
     if (!userInput.trim() || !providerName || !selectedModel || isLoading) return;
@@ -21,22 +76,27 @@
     userInput = '';
     isLoading = true;
     error = '';
+    streamingMessage = '';
+    streamStartTime = Date.now();
+    totalTokens = 0;
+    tokensPerSecond = 0;
 
     try {
       const request: ChatRequest = {
         model: selectedModel,
         messages: messages,
         temperature: 0.7,
-        stream: false,
+        stream: true,
       };
 
-      const response: ChatResponse = await sendChatMessage(providerName, request);
-      messages = [...messages, response.message];
+      await sendChatMessageStream(providerName, request);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       console.error('Chat error:', e);
-    } finally {
       isLoading = false;
+      streamingMessage = '';
+      totalTokens = 0;
+      tokensPerSecond = 0;
     }
   }
 
@@ -50,6 +110,9 @@
   function clearChat() {
     messages = [];
     error = '';
+    streamingMessage = '';
+    totalTokens = 0;
+    tokensPerSecond = 0;
   }
 </script>
 
@@ -76,10 +139,26 @@
       {/each}
     {/if}
 
-    {#if isLoading}
+    {#if isLoading && streamingMessage}
+      <div class="message assistant streaming">
+        <div class="message-role">assistant</div>
+        <div class="message-content">{streamingMessage}<span class="cursor">▋</span></div>
+        {#if tokensPerSecond > 0}
+          <div class="analytics">
+            <span class="token-rate">{tokensPerSecond.toFixed(1)} tokens/sec</span>
+          </div>
+        {/if}
+      </div>
+    {:else if isLoading}
       <div class="message assistant loading">
         <div class="message-role">assistant</div>
-        <div class="message-content">Thinking...</div>
+        <div class="message-content">
+          <div class="loading-dots">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
       </div>
     {/if}
 
@@ -200,6 +279,64 @@
 
   .loading {
     opacity: 0.7;
+  }
+
+  .streaming {
+    opacity: 1;
+  }
+
+  .cursor {
+    animation: blink 1s infinite;
+    color: #2563eb;
+  }
+
+  @keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  .loading-dots {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .loading-dots span {
+    width: 8px;
+    height: 8px;
+    background: #6b7280;
+    border-radius: 50%;
+    animation: bounce 1.4s infinite ease-in-out both;
+  }
+
+  .loading-dots span:nth-child(1) {
+    animation-delay: -0.32s;
+  }
+
+  .loading-dots span:nth-child(2) {
+    animation-delay: -0.16s;
+  }
+
+  @keyframes bounce {
+    0%, 80%, 100% {
+      transform: scale(0);
+    }
+    40% {
+      transform: scale(1);
+    }
+  }
+
+  .analytics {
+    margin-top: 0.5rem;
+    font-size: 0.75rem;
+    color: #9ca3af;
+    font-style: italic;
+  }
+
+  .token-rate {
+    background: rgba(37, 99, 235, 0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
   }
 
   .error-message {
