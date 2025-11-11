@@ -2,7 +2,6 @@
   import Chat from './lib/Chat.svelte';
   import ProviderSelector from './lib/ProviderSelector.svelte';
   import Button from '@smui/button';
-  import IconButton from '@smui/icon-button';
   import TopAppBar, { Row, Section, Title } from '@smui/top-app-bar';
   import { theme } from './lib/theme';
 
@@ -37,14 +36,14 @@
         <Title style="color: var(--text-primary);">Celestine Chat</Title>
       </Section>
       <Section align="end" toolbar>
-        <IconButton 
-          class="material-icons" 
+        <button 
+          class="theme-toggle-btn material-icons" 
           on:click={toggleTheme}
           title={currentTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-          style="color: var(--text-primary);"
+          aria-label="Toggle theme"
         >
           {currentTheme === 'dark' ? 'light_mode' : 'dark_mode'}
-        </IconButton>
+        </button>
         {#if currentProvider}
           <Button on:click={openSettings} variant="raised">Settings</Button>
         {/if}
@@ -127,5 +126,28 @@
   .welcome p {
     font-size: 1.1rem;
     color: var(--text-secondary);
+  }
+
+  .theme-toggle-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin-right: 0.5rem;
+  }
+
+  .theme-toggle-btn:hover {
+    background-color: rgba(128, 128, 128, 0.2);
+  }
+
+  .theme-toggle-btn:active {
+    background-color: rgba(128, 128, 128, 0.3);
   }
 </style>
